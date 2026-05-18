@@ -47,7 +47,7 @@ const EmployeeForm = () => {
 
     const fetchCompany = async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/auth/me');
+            const res = await axios.get('/api/auth/me');
             if (res.data.loggedIn) setCompany(res.data.company);
         } catch (err) {
             console.error('Failed to fetch company');
@@ -56,7 +56,7 @@ const EmployeeForm = () => {
 
     const fetchEmployee = async () => {
         try {
-            const res = await axios.get(`http://localhost:5000/api/employees/${id}`);
+            const res = await axios.get(`/api/employees/${id}`);
             const data = res.data;
             setFormData({
                 emp_name: data.emp_name || '',
@@ -74,7 +74,7 @@ const EmployeeForm = () => {
                 maps: data.maps || '',
                 brochure: data.brochure || ''
             });
-            if (data.photo) setPhotoPreview(`http://localhost:5000/${data.photo}`);
+            if (data.photo) setPhotoPreview(`/${data.photo}`);
         } catch (err) {
             console.error('Failed to fetch employee');
         }
@@ -122,9 +122,9 @@ const EmployeeForm = () => {
 
         try {
             if (id) {
-                await axios.put(`http://localhost:5000/api/employees/${id}`, data);
+                await axios.put(`/api/employees/${id}`, data);
             } else {
-                await axios.post('http://localhost:5000/api/employees', data);
+                await axios.post('/api/employees', data);
             }
             navigate(`/${company.company_slug}`);
         } catch (err) {
@@ -142,7 +142,7 @@ const EmployeeForm = () => {
             <nav className="navbar navbar-expand-lg bg-white shadow-sm rounded-4 mb-4 px-4 py-2">
                 <div className="container-fluid">
                     <div className="d-flex align-items-center gap-2">
-                        {company?.logo && <img src={`http://localhost:5000/${company.logo}`} alt="logo" style={{height:'35px', borderRadius:'8px'}} />}
+                        {company?.logo && <img src={`/${company.logo}`} alt="logo" style={{height:'35px', borderRadius:'8px'}} />}
                         <span className="fw-bold">{company?.company_name?.toUpperCase()}</span>
                     </div>
                     <button className="btn btn-outline-secondary btn-sm rounded-pill" onClick={() => navigate(-1)}>

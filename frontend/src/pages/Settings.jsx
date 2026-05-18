@@ -41,7 +41,7 @@ const Settings = () => {
 
     const fetchCompany = async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/auth/me');
+            const res = await axios.get('/api/auth/me');
             if (!res.data.loggedIn) {
                 navigate('/');
                 return;
@@ -83,7 +83,7 @@ const Settings = () => {
         if (logo) data.append('logo', logo);
 
         try {
-            const res = await axios.put('http://localhost:5000/api/company/update', data);
+            const res = await axios.put('/api/company/update', data);
             if (res.data.success) {
                 alert('Settings updated successfully!');
                 window.location.reload();

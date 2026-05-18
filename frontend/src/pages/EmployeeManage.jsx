@@ -28,7 +28,7 @@ const EmployeeManage = () => {
 
     const fetchProfile = async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/employee/me');
+            const res = await axios.get('/api/employee/me');
             if (res.data.success) {
                 const emp = res.data.employee;
                 setEmployee(emp);
@@ -58,7 +58,7 @@ const EmployeeManage = () => {
         if (photo) data.append('photo', photo);
 
         try {
-            await axios.put('http://localhost:5000/api/employee/update-me', data);
+            await axios.put('/api/employee/update-me', data);
             setMessage({ text: 'Profile updated successfully!', type: 'success' });
             setTimeout(() => setMessage({ text: '', type: '' }), 3000);
         } catch (err) {
@@ -95,7 +95,7 @@ const EmployeeManage = () => {
                             <div className="col-12 text-center mb-3">
                                 <div className="position-relative d-inline-block">
                                     <img 
-                                        src={photo ? URL.createObjectURL(photo) : (employee?.photo ? `http://localhost:5000/${employee.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(employee?.full_name || 'User')}&background=${(theme.theme_color1 || '#667eea').replace('#','')}&color=ffffff&size=200`)} 
+                                        src={photo ? URL.createObjectURL(photo) : (employee?.photo ? `/${employee.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(employee?.full_name || 'User')}&background=${(theme.theme_color1 || '#667eea').replace('#','')}&color=ffffff&size=200`)} 
                                         alt="Profile" 
                                         className="rounded-circle shadow-lg"
                                         style={{ width: '150px', height: '150px', objectFit: 'cover', border: '5px solid white' }}
@@ -149,7 +149,7 @@ const EmployeeManage = () => {
                                 <button type="submit" disabled={saving} className="btn btn-primary w-100 py-3 rounded-4 fw-bold shadow-sm">
                                     {saving ? 'Saving Changes...' : 'Update My Digital Card'}
                                 </button>
-                                <button type="button" onClick={() => { axios.post('http://localhost:5000/api/auth/logout').then(() => navigate('/')); }} className="btn btn-link w-100 mt-3 text-danger text-decoration-none small">
+                                <button type="button" onClick={() => { axios.post('/api/auth/logout').then(() => navigate('/')); }} className="btn btn-link w-100 mt-3 text-danger text-decoration-none small">
                                     <i className="bi bi-box-arrow-right me-2"></i>Logout from Session
                                 </button>
                             </div>

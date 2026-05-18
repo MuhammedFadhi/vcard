@@ -1,4 +1,8 @@
 {
+    "rewrites": [
+        { "source": "/api/(.*)", "destination": "/_/backend/api/$1" },
+        { "source": "/uploads/(.*)", "destination": "/_/backend/uploads/$1" }
+    ],
     "experimentalServices": {
         "frontend": {
             "entrypoint": "frontend",
