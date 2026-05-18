@@ -18,14 +18,14 @@ const Dashboard = () => {
 
     const fetchData = async () => {
         try {
-            const authRes = await axios.get('http://localhost:5000/api/auth/me');
+            const authRes = await axios.get('/api/auth/me');
             if (!authRes.data.loggedIn || authRes.data.company.company_slug !== companySlug) {
                 navigate('/');
                 return;
             }
             setCompany(authRes.data.company);
 
-            const empRes = await axios.get('http://localhost:5000/api/employees');
+            const empRes = await axios.get('/api/employees');
             setEmployees(empRes.data);
             setLoading(false);
         } catch (err) {
@@ -34,14 +34,14 @@ const Dashboard = () => {
     };
 
     const handleLogout = async () => {
-        await axios.post('http://localhost:5000/api/auth/logout');
+        await axios.post('/api/auth/logout');
         navigate('/');
     };
 
     const handleDelete = async (id) => {
         if (window.confirm('Delete this employee card permanently?')) {
             try {
-                const res = await axios.delete(`http://localhost:5000/api/employees/${id}`);
+                const res = await axios.delete(`/api/employees/${id}`);
                 if (res.data.success) {
                     fetchData();
                 } else {
@@ -84,7 +84,7 @@ const Dashboard = () => {
             <nav className="navbar navbar-premium mb-0">
                 <div className="container-fluid px-4 px-md-5">
                     <Link className="brand-wrap-premium d-flex align-items-center gap-2 text-decoration-none" to={`/${companySlug}`}>
-                        {company?.logo && <img src={`http://localhost:5000/${company.logo}`} alt="logo" style={{height:'45px', width:'45px', borderRadius:'12px', objectFit:'cover'}} />}
+                        {company?.logo && <img src={`/${company.logo}`} alt="logo" style={{height:'45px', width:'45px', borderRadius:'12px', objectFit:'cover'}} />}
                         <span className="fw-bold text-dark fs-5">{company?.company_name?.toUpperCase()}</span>
                     </Link>
                     <div className="nav-actions d-flex gap-2">
@@ -122,7 +122,7 @@ const Dashboard = () => {
                                     {/* Avatar - Exact Match with 6px border */}
                                     <img 
                                         className="emp-photo-premium"
-                                        src={emp.photo ? `http://localhost:5000/${emp.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.emp_name)}&background=${theme1.replace('#','')}&color=ffffff&size=200`} 
+                                        src={emp.photo ? `/${emp.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.emp_name)}&background=${theme1.replace('#','')}&color=ffffff&size=200`} 
                                         alt={emp.emp_name}
                                         onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.emp_name)}&background=${theme1.replace('#','')}&color=ffffff&size=200` }}
                                     />

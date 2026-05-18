@@ -10,7 +10,7 @@ const CardView = () => {
     useEffect(() => {
         const fetchCard = async () => {
             try {
-                const res = await axios.get(`http://localhost:5000/api/public/card/${companySlug}/${empCode}`);
+                const res = await axios.get(`/api/public/card/${companySlug}/${empCode}`);
                 setEmployee(res.data);
             } catch (err) {
                 console.error('Card not found');
@@ -39,7 +39,7 @@ const CardView = () => {
             {/* Top Photo Section */}
             <div className="position-relative overflow-hidden" style={{ height: '400px' }}>
                 <img 
-                    src={employee.photo ? `http://localhost:5000/${employee.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(employee.emp_name)}&background=${theme1.replace('#','')}&color=ffffff&size=512`} 
+                    src={employee.photo ? `/${employee.photo}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(employee.emp_name)}&background=${theme1.replace('#','')}&color=ffffff&size=512`} 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     alt={employee.emp_name}
                 />

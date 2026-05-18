@@ -23,7 +23,7 @@ const AuthPage = () => {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+            const res = await axios.post('/api/auth/login', { email, password });
             if (res.data.success) navigate(`/${res.data.company_slug}`);
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed');
@@ -35,7 +35,7 @@ const AuthPage = () => {
         setLoading(true);
         setError('');
         try {
-            await axios.post('http://localhost:5000/api/auth/employee/request-otp', { email });
+            await axios.post('/api/auth/employee/request-otp', { email });
             setOtpSent(true);
         } catch (err) {
             setError(err.response?.data?.message || 'Employee not found');
@@ -47,7 +47,7 @@ const AuthPage = () => {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.post('http://localhost:5000/api/auth/employee/verify-otp', { email, otp });
+            const res = await axios.post('/api/auth/employee/verify-otp', { email, otp });
             if (res.data.success) navigate(`/${res.data.company_slug}/manage`); // Private manage route
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid code');
@@ -66,7 +66,7 @@ const AuthPage = () => {
         if (logo) formData.append('logo', logo);
 
         try {
-            const res = await axios.post('http://localhost:5000/api/auth/register', formData);
+            const res = await axios.post('/api/auth/register', formData);
             if (res.data.success) navigate(`/${res.data.company_slug}`);
         } catch (err) {
             setError(err.response?.data?.message || 'Registration failed');
