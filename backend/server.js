@@ -55,6 +55,34 @@ const makeSlug = (text) => text.toLowerCase().replace(/ /g, '-').replace(/[^\w-]
 
 // --- AUTH ROUTES ---
 
+// Test Database Connection Route
+app.get('/api/test-db', async (req, res) => {
+    try {
+        const testDb = require('mysql2/promise');
+        const connection = await testDb.createConnection({
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASS,
+            database: process.env.DB_NAME,
+            connectTimeout: 5000
+        });
+        const [rows] = await connection.execute('SHOW TABLES');
+        await connection.end();
+        res.json({ 
+            success: true, 
+            message: "Successfully connected to the remote database!",
+            tables_found: rows.map(r => Object.values(r)[0])
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to connect to database. It is likely blocked by your hosting firewall.",
+            error_code: error.code,
+            error_message: error.message
+        });
+    }
+});
+
 // Registration
 app.post('/api/auth/register', upload.single('logo'), async (req, res) => {
     try {
