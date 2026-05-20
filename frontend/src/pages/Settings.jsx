@@ -104,7 +104,7 @@ const Settings = () => {
             <nav className="navbar navbar-premium mb-0">
                 <div className="container-fluid px-4 px-md-5">
                     <div className="brand-wrap-premium d-flex align-items-center gap-2">
-                        {company?.logo && <img src={`http://localhost:5000/${company.logo}`} alt="logo" style={{height:'40px', width:'40px', borderRadius:'10px'}} />}
+                        {company?.logo && <img src={`/${company.logo}`} alt="logo" style={{height:'40px', width:'40px', borderRadius:'10px'}} />}
                         <span className="fw-bold text-dark fs-5">{company?.company_name?.toUpperCase()} SETTINGS</span>
                     </div>
                     <div className="d-flex gap-2">
@@ -188,7 +188,7 @@ const Settings = () => {
                         <div className="col-md-6">
                             <label className="small fw-bold mb-2 d-flex align-items-center gap-2"><i className="bi bi-image"></i> Replace Logo (optional)</label>
                             <input type="file" onChange={(e) => setLogo(e.target.files[0])} className="form-control py-3 px-4 rounded-3 bg-light border-0" />
-                            {company?.logo && <small className="text-success mt-1 d-block"><i className="bi bi-check-circle"></i> Current logo: <Link to={`http://localhost:5000/${company.logo}`} target="_blank" className="text-decoration-none">view logo</Link></small>}
+                            {company?.logo && <small className="text-success mt-1 d-block"><i className="bi bi-check-circle"></i> Current logo: <Link to={`/${company.logo}`} target="_blank" className="text-decoration-none">view logo</Link></small>}
                         </div>
                         <div className="col-12">
                             <label className="small fw-bold mb-2 d-flex align-items-center gap-2"><i className="bi bi-shield-lock"></i> New Password (optional)</label>

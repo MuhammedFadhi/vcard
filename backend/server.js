@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
-const MySQLStore = require('express-mysql-session')(session);
+const FileStore = require('session-file-store')(session);
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -15,32 +15,25 @@ require('dotenv').config();
 // Middleware
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Session Setup
-const sessionStore = new MySQLStore({
-    clearExpired: true,
-    checkExpirationInterval: 900000,
-    expiration: 86400000,
-    createDatabaseTable: true
-}, db);
+const baseUploadsPath = process.env.VERCEL ? '/tmp' : path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(baseUploadsPath));
 
+// Session
 app.use(session({
-    store: sessionStore,
+    store: new FileStore({ path: './sessions' }),
     secret: process.env.SESSION_SECRET || 'vcard_secret_123',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false, httpOnly: true, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// Multer for uploads (Using /tmp for Vercel Serverless compatibility)
+// Multer for uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const companySlug = req.session.company_slug || 'temp';
         const type = req.url.includes('employees') ? 'employees' : 'logos';
-        // Use /tmp for serverless environments, fallback to local uploads folder
-        const baseDir = process.env.VERCEL ? '/tmp' : path.join(__dirname, '../uploads');
-        const dir = path.join(baseDir, companySlug, type);
+        const dir = path.join(baseUploadsPath, companySlug, type);
         fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
     },
@@ -70,7 +63,7 @@ app.get('/api/test-db', async (req, res) => {
         await connection.end();
         res.json({ 
             success: true, 
-            message: "Successfully connected to the remote database!",
+            message: "Successfully connected to the database!",
             tables_found: rows.map(r => Object.values(r)[0])
         });
     } catch (error) {
