@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
 const supabase = require('./db'); // Now points to Supabase
-const { sendOTPEmail, sendWelcomeInvite } = require('./utils/email'); // Now uses SendGrid
+const { sendOTPEmail, sendWelcomeInvite, sendCompanyOTPEmail } = require('./utils/email');
 
 const app = express();
 require('dotenv').config();
@@ -105,24 +105,61 @@ app.post('/api/auth/register', upload.single('logo'), async (req, res) => {
     }
 });
 
-// Login
+// Login — Step 1: Verify password and send OTP
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         const { data, error } = await supabase
             .from('companies')
             .select('*')
-            .eq('email', email);
+            .eq('email', email)
+            .single();
             
-        if (error) throw error;
-        const company = data[0];
-
-        if (!company) return res.status(401).json({ success: false, message: 'No Account Found' });
+        if (error || !data) return res.status(401).json({ success: false, message: 'No Account Found' });
+        const company = data;
 
         const match = await bcrypt.compare(password, company.password);
-        if (!match && password !== company.password) { // Support plain text for legacy if needed
-             return res.status(401).json({ success: false, message: 'Invalid Password' });
+        if (!match && password !== company.password) {
+            return res.status(401).json({ success: false, message: 'Invalid Password' });
         }
+
+        // Password is correct — generate and send OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await supabase
+            .from('companies')
+            .update({ otp_code: otp, otp_expiry: expiry })
+            .eq('id', company.id);
+
+        await sendCompanyOTPEmail(email, otp, company.company_name);
+
+        res.json({ success: true, require_otp: true, email });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Login — Step 2: Verify OTP and create session
+app.post('/api/auth/verify-company-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const { data, error } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('email', email)
+            .eq('otp_code', otp)
+            .gt('otp_expiry', new Date().toISOString())
+            .single();
+
+        if (error || !data) return res.status(401).json({ success: false, message: 'Invalid or expired code' });
+        const company = data;
+
+        // Clear OTP and create session
+        await supabase
+            .from('companies')
+            .update({ otp_code: null, otp_expiry: null })
+            .eq('id', company.id);
 
         req.session.employee_id = null;
         req.session.company_id = company.id;

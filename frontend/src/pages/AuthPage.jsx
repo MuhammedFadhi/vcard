@@ -24,9 +24,23 @@ const AuthPage = () => {
         setError('');
         try {
             const res = await axios.post('/api/auth/login', { email, password });
-            if (res.data.success) navigate(`/${res.data.company_slug}`);
+            if (res.data.success && res.data.require_otp) {
+                setOtpSent(true); // Show OTP input
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed');
+        } finally { setLoading(false); }
+    };
+
+    const handleVerifyCompanyOTP = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        try {
+            const res = await axios.post('/api/auth/verify-company-otp', { email, otp });
+            if (res.data.success) navigate(`/${res.data.company_slug}`);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Invalid or expired code');
         } finally { setLoading(false); }
     };
 
@@ -73,6 +87,12 @@ const AuthPage = () => {
         } finally { setLoading(false); }
     };
 
+    const resetLogin = () => {
+        setOtpSent(false);
+        setOtp('');
+        setError('');
+    };
+
     return (
         <div className="auth-container">
             <div className="form-box">
@@ -87,7 +107,7 @@ const AuthPage = () => {
                 {error && <div className="error-message mb-3">{error}</div>}
 
                 {/* --- COMPANY LOGIN --- */}
-                {view === 'login' && (
+                {view === 'login' && !otpSent && (
                     <form onSubmit={handleAdminLogin}>
                         <div className="form-group">
                             <label>Admin Email</label>
@@ -97,10 +117,43 @@ const AuthPage = () => {
                             <label>Password</label>
                             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
                         </div>
-                        <button type="submit" disabled={loading}>{loading ? 'Authenticating...' : 'Log In as Admin'}</button>
+                        <button type="submit" disabled={loading}>{loading ? 'Verifying...' : 'Log In as Admin'}</button>
                         <div className="form-footer d-flex flex-column gap-2 mt-4">
                             <a href="#" onClick={() => setView('employee')} className="fw-bold text-primary">Are you an Employee? Login here</a>
                             <a href="#" onClick={() => setView('register')}>Don't have a company account? Sign Up</a>
+                        </div>
+                    </form>
+                )}
+
+                {/* --- COMPANY OTP STEP --- */}
+                {view === 'login' && otpSent && (
+                    <form onSubmit={handleVerifyCompanyOTP}>
+                        <div className="form-group">
+                            <label>Admin Email</label>
+                            <input type="email" value={email} disabled className="text-muted" />
+                        </div>
+                        <div className="form-group">
+                            <label>Verification Code</label>
+                            <input
+                                type="text"
+                                value={otp}
+                                onChange={(e) => setOtp(e.target.value)}
+                                placeholder="000000"
+                                maxLength="6"
+                                className="text-center fw-bold fs-4"
+                                style={{ letterSpacing: '8px' }}
+                                required
+                                autoFocus
+                            />
+                            <small className="text-muted d-block text-center mt-2">
+                                A 6-digit code was sent to <strong>{email}</strong>
+                            </small>
+                        </div>
+                        <button type="submit" disabled={loading} className="btn-success">
+                            {loading ? 'Verifying...' : 'Verify & Login'}
+                        </button>
+                        <div className="form-footer mt-4">
+                            <a href="#" onClick={resetLogin}>← Back to Login</a>
                         </div>
                     </form>
                 )}

@@ -36,6 +36,21 @@ const sendOTPEmail = async (email, otp, companyName) => {
     return sendEmail(email, `Your Login Code for ${companyName}`, html);
 };
 
+const sendCompanyOTPEmail = async (email, otp, companyName) => {
+    const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <h2 style="color: #4f46e5; text-align: center;">Admin Login Verification</h2>
+            <p>Hello, <strong>${companyName} Admin</strong>,</p>
+            <p>A login attempt was made to your company dashboard. Please use the code below to complete your sign-in:</p>
+            <div style="background: #f1f5f9; padding: 24px; text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1e293b; border-radius: 8px; margin: 20px 0;">
+                ${otp}
+            </div>
+            <p style="color: #64748b; font-size: 14px; text-align: center;">This code expires in <strong>10 minutes</strong>. If you did not attempt to log in, please secure your account immediately.</p>
+        </div>
+    `;
+    return sendEmail(email, `Your Admin Login Code — ${companyName}`, html);
+};
+
 const sendWelcomeInvite = async (email, companyName) => {
     const loginLink = `http://localhost:5173/?view=employee`; // Link to your login page
     const html = `
@@ -52,4 +67,4 @@ const sendWelcomeInvite = async (email, companyName) => {
     return sendEmail(email, `Welcome to ${companyName} - Manage your Digital Card`, html);
 };
 
-module.exports = { sendOTPEmail, sendWelcomeInvite };
+module.exports = { sendOTPEmail, sendWelcomeInvite, sendCompanyOTPEmail };
