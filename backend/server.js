@@ -6,7 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
-const db = require('./db'); // Now points to MySQL
+const supabase = require('./db'); // Now points to Supabase
 const { sendOTPEmail, sendWelcomeInvite } = require('./utils/email'); // Now uses SendGrid
 
 const app = express();
@@ -51,25 +51,18 @@ const makeSlug = (text) => text.toLowerCase().replace(/ /g, '-').replace(/[^\w-]
 // Test Database Connection Route
 app.get('/api/test-db', async (req, res) => {
     try {
-        const testDb = require('mysql2/promise');
-        const connection = await testDb.createConnection({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASS,
-            database: process.env.DB_NAME,
-            connectTimeout: 5000
-        });
-        const [rows] = await connection.execute('SHOW TABLES');
-        await connection.end();
+        const { data, error } = await supabase.from('companies').select('id').limit(1);
+        if (error) throw error;
+        
         res.json({ 
             success: true, 
-            message: "Successfully connected to the database!",
-            tables_found: rows.map(r => Object.values(r)[0])
+            message: "Successfully connected to the Supabase database!",
+            tables_found: ["companies", "employees"]
         });
     } catch (error) {
         res.status(500).json({ 
             success: false, 
-            message: "Failed to connect to database. It is likely blocked by your hosting firewall.",
+            message: "Failed to connect to database.",
             error_code: error.code,
             error_message: error.message
         });
@@ -88,12 +81,21 @@ app.post('/api/auth/register', upload.single('logo'), async (req, res) => {
             logo_rel = `uploads/${slug}/logos/${req.file.filename}`;
         }
 
-        const [result] = await db.execute(
-            'INSERT INTO companies (company_name, company_slug, logo, created_by, email, password) VALUES (?, ?, ?, ?, ?, ?)',
-            [company_name, slug, logo_rel, created_by, email, hashedPassword]
-        );
+        const { data, error } = await supabase
+            .from('companies')
+            .insert([{
+                company_name,
+                company_slug: slug,
+                logo: logo_rel,
+                created_by,
+                email,
+                password: hashedPassword
+            }])
+            .select();
 
-        req.session.company_id = result.insertId;
+        if (error) throw error;
+
+        req.session.company_id = data[0].id;
         req.session.company_slug = slug;
 
         res.json({ success: true, company_slug: slug });
@@ -107,8 +109,13 @@ app.post('/api/auth/register', upload.single('logo'), async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const [rows] = await db.execute('SELECT * FROM companies WHERE email = ?', [email]);
-        const company = rows[0];
+        const { data, error } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('email', email);
+            
+        if (error) throw error;
+        const company = data[0];
 
         if (!company) return res.status(401).json({ success: false, message: 'No Account Found' });
 
@@ -137,13 +144,41 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/me', async (req, res) => {
     try {
         if (req.session.employee_id) {
-            const [rows] = await db.execute('SELECT e.*, c.company_name, c.company_slug, c.theme_color1, c.theme_color2 FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.id = ?', [req.session.employee_id]);
-            if (rows[0]) return res.json({ loggedIn: true, role: 'employee', employee: rows[0] });
+            const { data, error } = await supabase
+                .from('employees')
+                .select(`
+                    *,
+                    companies (
+                        company_name,
+                        company_slug,
+                        theme_color1,
+                        theme_color2
+                    )
+                `)
+                .eq('id', req.session.employee_id)
+                .single();
+                
+            if (data && !error) {
+                // Flatten to match MySQL output
+                const employee = {
+                    ...data,
+                    company_name: data.companies.company_name,
+                    company_slug: data.companies.company_slug,
+                    theme_color1: data.companies.theme_color1,
+                    theme_color2: data.companies.theme_color2
+                };
+                delete employee.companies;
+                return res.json({ loggedIn: true, role: 'employee', employee });
+            }
         }
 
         if (req.session.company_id) {
-            const [rows] = await db.execute('SELECT * FROM companies WHERE id = ?', [req.session.company_id]);
-            if (rows[0]) return res.json({ loggedIn: true, role: 'admin', company: rows[0] });
+            const { data, error } = await supabase
+                .from('companies')
+                .select('*')
+                .eq('id', req.session.company_id)
+                .single();
+            if (data && !error) return res.json({ loggedIn: true, role: 'admin', company: data });
         }
         res.json({ loggedIn: false });
     } catch (err) {
@@ -156,17 +191,24 @@ app.get('/api/auth/me', async (req, res) => {
 app.post('/api/auth/employee/request-otp', async (req, res) => {
     const { email } = req.body;
     try {
-        const [rows] = await db.execute('SELECT e.*, c.company_name FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.email = ?', [email]);
-        const employee = rows[0];
+        const { data, error } = await supabase
+            .from('employees')
+            .select(`*, companies(company_name)`)
+            .eq('email', email)
+            .single();
 
-        if (!employee) return res.status(404).json({ message: 'Email not found' });
+        if (error || !data) return res.status(404).json({ message: 'Email not found' });
 
+        const employee = data;
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+        const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
 
-        await db.execute('UPDATE employees SET otp_code = ?, otp_expiry = ? WHERE id = ?', [otp, expiry, employee.id]);
+        await supabase
+            .from('employees')
+            .update({ otp_code: otp, otp_expiry: expiry })
+            .eq('id', employee.id);
 
-        await sendOTPEmail(email, otp, employee.company_name);
+        await sendOTPEmail(email, otp, employee.companies.company_name);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ message: 'Failed to send OTP' });
@@ -176,18 +218,27 @@ app.post('/api/auth/employee/request-otp', async (req, res) => {
 app.post('/api/auth/employee/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
     try {
-        const [rows] = await db.execute('SELECT e.*, c.company_slug FROM employees e JOIN companies c ON e.company_id = c.id WHERE e.email = ? AND e.otp_code = ? AND e.otp_expiry > NOW()', [email, otp]);
-        const employee = rows[0];
+        const { data, error } = await supabase
+            .from('employees')
+            .select(`*, companies(company_slug)`)
+            .eq('email', email)
+            .eq('otp_code', otp)
+            .gt('otp_expiry', new Date().toISOString())
+            .single();
 
-        if (!employee) return res.status(401).json({ message: 'Invalid or expired code' });
+        if (error || !data) return res.status(401).json({ message: 'Invalid or expired code' });
+        const employee = data;
 
-        await db.execute('UPDATE employees SET otp_code = NULL, otp_expiry = NULL WHERE id = ?', [employee.id]);
+        await supabase
+            .from('employees')
+            .update({ otp_code: null, otp_expiry: null })
+            .eq('id', employee.id);
 
         req.session.employee_id = employee.id;
         req.session.company_id = employee.company_id;
-        req.session.company_slug = employee.company_slug;
+        req.session.company_slug = employee.companies.company_slug;
 
-        res.json({ success: true, company_slug: employee.company_slug });
+        res.json({ success: true, company_slug: employee.companies.company_slug });
     } catch (err) {
         res.status(500).json({ message: 'Verification failed' });
     }
@@ -198,22 +249,30 @@ app.post('/api/auth/employee/verify-otp', async (req, res) => {
 app.get('/api/employee/me', async (req, res) => {
     if (!req.session.employee_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
-        const [rows] = await db.execute(`
-            SELECT e.*, c.company_name, c.company_slug, c.theme_color1, c.theme_color2 
-            FROM employees e 
-            JOIN companies c ON e.company_id = c.id 
-            WHERE e.id = ?
-        `, [req.session.employee_id]);
+        const { data, error } = await supabase
+            .from('employees')
+            .select(`
+                *,
+                companies (
+                    company_name,
+                    company_slug,
+                    theme_color1,
+                    theme_color2
+                )
+            `)
+            .eq('id', req.session.employee_id)
+            .single();
+            
+        if (error || !data) return res.status(404).json({ message: 'Employee not found' });
         
-        const emp = rows[0];
-        if (!emp) return res.status(404).json({ message: 'Employee not found' });
+        const emp = data;
 
         // Map for frontend state
         emp.full_name = emp.emp_name;
         emp.companies = {
-            theme_color1: emp.theme_color1,
-            theme_color2: emp.theme_color2,
-            company_name: emp.company_name
+            theme_color1: emp.companies.theme_color1,
+            theme_color2: emp.companies.theme_color2,
+            company_name: emp.companies.company_name
         };
 
         // Parse card_data for individual fields
@@ -239,10 +298,17 @@ app.put('/api/employee/update-me', upload.single('photo'), async (req, res) => {
         const { full_name, designation, phone, website, linkedin, instagram, facebook, twitter } = req.body;
         
         // Fetch current card_data to preserve other fields
-        const [rows] = await db.execute('SELECT card_data FROM employees WHERE id = ?', [req.session.employee_id]);
+        const { data, error: fetchError } = await supabase
+            .from('employees')
+            .select('card_data')
+            .eq('id', req.session.employee_id)
+            .single();
+            
+        if (fetchError) throw fetchError;
+        
         let cardData = {};
-        if (rows[0] && rows[0].card_data) {
-            cardData = typeof rows[0].card_data === 'string' ? JSON.parse(rows[0].card_data) : rows[0].card_data;
+        if (data && data.card_data) {
+            cardData = typeof data.card_data === 'string' ? JSON.parse(data.card_data) : data.card_data;
         }
 
         // Update card_data structure
@@ -252,19 +318,24 @@ app.put('/api/employee/update-me', upload.single('photo'), async (req, res) => {
         if (!cardData.contact) cardData.contact = {};
         cardData.contact.phone = phone;
 
-        let query = 'UPDATE employees SET emp_name = ?, designation = ?, phone = ?, card_data = ?';
-        let params = [full_name, designation, phone, JSON.stringify(cardData)];
+        let updateData = {
+            emp_name: full_name,
+            designation,
+            phone,
+            card_data: cardData // Supabase handles JSON natively
+        };
 
         if (req.file) {
-            const photo_rel = `uploads/${req.session.company_slug}/employees/${req.file.filename}`;
-            query += ', photo = ?';
-            params.push(photo_rel);
+            updateData.photo = `uploads/${req.session.company_slug}/employees/${req.file.filename}`;
         }
 
-        query += ' WHERE id = ?';
-        params.push(req.session.employee_id);
-
-        await db.execute(query, params);
+        const { error: updateError } = await supabase
+            .from('employees')
+            .update(updateData)
+            .eq('id', req.session.employee_id);
+            
+        if (updateError) throw updateError;
+        
         res.json({ success: true });
     } catch (err) {
         console.error(err);
@@ -277,8 +348,14 @@ app.put('/api/employee/update-me', upload.single('photo'), async (req, res) => {
 app.get('/api/company/settings', async (req, res) => {
     if (!req.session.company_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
-        const [rows] = await db.execute('SELECT * FROM companies WHERE id = ?', [req.session.company_id]);
-        res.json(rows[0]);
+        const { data, error } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('id', req.session.company_id)
+            .single();
+            
+        if (error) throw error;
+        res.json(data);
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch settings' });
     }
@@ -288,19 +365,18 @@ app.put('/api/company/update', upload.single('logo'), async (req, res) => {
     if (!req.session.company_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
         const { company_name, created_by, theme_color1, theme_color2, social_links } = req.body;
-        let query = 'UPDATE companies SET company_name = ?, created_by = ?, theme_color1 = ?, theme_color2 = ?, social_links = ?';
-        let params = [company_name, created_by, theme_color1, theme_color2, social_links];
+        let updateData = { company_name, created_by, theme_color1, theme_color2, social_links };
 
         if (req.file) {
-            const logo_rel = `uploads/${req.session.company_slug}/logos/${req.file.filename}`;
-            query += ', logo = ?';
-            params.push(logo_rel);
+            updateData.logo = `uploads/${req.session.company_slug}/logos/${req.file.filename}`;
         }
 
-        query += ' WHERE id = ?';
-        params.push(req.session.company_id);
-
-        await db.execute(query, params);
+        const { error } = await supabase
+            .from('companies')
+            .update(updateData)
+            .eq('id', req.session.company_id);
+            
+        if (error) throw error;
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ message: 'Update failed' });
@@ -312,8 +388,13 @@ app.put('/api/company/update', upload.single('logo'), async (req, res) => {
 app.get('/api/employees', async (req, res) => {
     if (!req.session.company_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
-        const [rows] = await db.execute('SELECT id, emp_name, emp_code, emp_slug, designation, photo FROM employees WHERE company_id = ?', [req.session.company_id]);
-        res.json(rows);
+        const { data, error } = await supabase
+            .from('employees')
+            .select('id, emp_name, emp_code, emp_slug, designation, photo')
+            .eq('company_id', req.session.company_id);
+            
+        if (error) throw error;
+        res.json(data);
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch employees' });
     }
@@ -332,17 +413,28 @@ app.post('/api/employees', upload.single('photo'), async (req, res) => {
         if (req.file) photo_rel = `uploads/${companySlug}/employees/${req.file.filename}`;
 
         // Prepare card_data JSON for legacy compatibility
-        const card_data = JSON.stringify({
+        const card_data = {
             contact: { phone, email, whatsapp },
             about: { headline, text: about },
             social: { linkedin, instagram, facebook, twitter },
             links: { website, maps, brochure }
-        });
+        };
 
-        await db.execute(
-            'INSERT INTO employees (company_id, emp_name, emp_slug, designation, phone, email, photo, card_data, emp_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [companyId, emp_name, emp_slug, designation, phone, email, photo_rel, card_data, emp_code]
-        );
+        const { error } = await supabase
+            .from('employees')
+            .insert([{
+                company_id: companyId,
+                emp_name,
+                emp_slug,
+                designation,
+                phone,
+                email,
+                photo: photo_rel,
+                card_data,
+                emp_code
+            }]);
+
+        if (error) throw error;
 
         if (email) await sendWelcomeInvite(email, req.session.company_slug);
 
@@ -356,11 +448,17 @@ app.post('/api/employees', upload.single('photo'), async (req, res) => {
 app.get('/api/employees/:id', async (req, res) => {
     if (!req.session.company_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
-        const [rows] = await db.execute('SELECT * FROM employees WHERE id = ? AND company_id = ?', [req.params.id, req.session.company_id]);
-        if (!rows[0]) return res.status(404).json({ message: 'Not Found' });
+        const { data, error } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('id', req.params.id)
+            .eq('company_id', req.session.company_id)
+            .single();
+            
+        if (error || !data) return res.status(404).json({ message: 'Not Found' });
         
         // Handle card_data parsing if needed for the frontend form
-        const emp = rows[0];
+        const emp = data;
         if (emp.card_data) {
             const cd = typeof emp.card_data === 'string' ? JSON.parse(emp.card_data) : emp.card_data;
             emp.whatsapp = cd.contact?.whatsapp || '';
@@ -384,26 +482,32 @@ app.put('/api/employees/:id', upload.single('photo'), async (req, res) => {
     if (!req.session.company_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
         const { emp_name, designation, phone, email, whatsapp, linkedin, instagram, facebook, twitter, website, maps, brochure, headline, about } = req.body;
-        const card_data = JSON.stringify({
+        const card_data = {
             contact: { phone, email, whatsapp },
             about: { headline, text: about },
             social: { linkedin, instagram, facebook, twitter },
             links: { website, maps, brochure }
-        });
+        };
 
-        let query = 'UPDATE employees SET emp_name = ?, designation = ?, phone = ?, email = ?, card_data = ?';
-        let params = [emp_name, designation, phone, email, card_data];
+        let updateData = {
+            emp_name,
+            designation,
+            phone,
+            email,
+            card_data
+        };
 
         if (req.file) {
-            const photo_rel = `uploads/${req.session.company_slug}/employees/${req.file.filename}`;
-            query += ', photo = ?';
-            params.push(photo_rel);
+            updateData.photo = `uploads/${req.session.company_slug}/employees/${req.file.filename}`;
         }
 
-        query += ' WHERE id = ? AND company_id = ?';
-        params.push(req.params.id, req.session.company_id);
+        const { error } = await supabase
+            .from('employees')
+            .update(updateData)
+            .eq('id', req.params.id)
+            .eq('company_id', req.session.company_id);
 
-        await db.execute(query, params);
+        if (error) throw error;
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ message: 'Update failed' });
@@ -414,10 +518,16 @@ app.delete('/api/employees/:id', async (req, res) => {
     if (!req.session.company_id) return res.status(401).json({ message: 'Unauthorized' });
     try {
         // Fetch employee to get photo path for cleanup
-        const [rows] = await db.execute('SELECT photo FROM employees WHERE id = ? AND company_id = ?', [req.params.id, req.session.company_id]);
-        const employee = rows[0];
+        const { data, error: fetchError } = await supabase
+            .from('employees')
+            .select('photo')
+            .eq('id', req.params.id)
+            .eq('company_id', req.session.company_id)
+            .single();
 
-        if (!employee) return res.status(404).json({ message: 'Employee not found' });
+        if (fetchError || !data) return res.status(404).json({ message: 'Employee not found' });
+
+        const employee = data;
 
         // Delete photo from disk if it exists
         if (employee.photo) {
@@ -428,7 +538,13 @@ app.delete('/api/employees/:id', async (req, res) => {
         }
 
         // Delete from database
-        await db.execute('DELETE FROM employees WHERE id = ? AND company_id = ?', [req.params.id, req.session.company_id]);
+        const { error: deleteError } = await supabase
+            .from('employees')
+            .delete()
+            .eq('id', req.params.id)
+            .eq('company_id', req.session.company_id);
+            
+        if (deleteError) throw deleteError;
         
         res.json({ success: true });
     } catch (err) {
@@ -440,12 +556,31 @@ app.delete('/api/employees/:id', async (req, res) => {
 // --- PUBLIC CARD VIEW ---
 app.get('/api/public/card/:companySlug/:empCode', async (req, res) => {
     try {
-        const [rows] = await db.execute(
-            'SELECT e.*, c.company_name, c.theme_color1, c.theme_color2, c.logo as company_logo, c.social_links as company_social FROM employees e JOIN companies c ON e.company_id = c.id WHERE c.company_slug = ? AND e.emp_code = ?',
-            [req.params.companySlug, req.params.empCode]
-        );
-        const employee = rows[0];
-        if (!employee) return res.status(404).json({ message: 'Card not found' });
+        const { data: companyData, error: companyError } = await supabase
+            .from('companies')
+            .select('id, company_name, theme_color1, theme_color2, logo, social_links')
+            .eq('company_slug', req.params.companySlug)
+            .single();
+            
+        if (companyError || !companyData) return res.status(404).json({ message: 'Company not found' });
+        
+        const { data: employeeData, error: empError } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('emp_code', req.params.empCode)
+            .eq('company_id', companyData.id)
+            .single();
+
+        if (empError || !employeeData) return res.status(404).json({ message: 'Card not found' });
+
+        const employee = {
+            ...employeeData,
+            company_name: companyData.company_name,
+            theme_color1: companyData.theme_color1,
+            theme_color2: companyData.theme_color2,
+            company_logo: companyData.logo,
+            company_social: companyData.social_links
+        };
 
         // Parse JSON fields
         if (employee.card_data) employee.card_data = typeof employee.card_data === 'string' ? JSON.parse(employee.card_data) : employee.card_data;
@@ -458,4 +593,4 @@ app.get('/api/public/card/:companySlug/:empCode', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 MySQL Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Supabase Server running on http://localhost:${PORT}`));
