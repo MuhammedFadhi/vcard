@@ -52,7 +52,8 @@ const sendCompanyOTPEmail = async (email, otp, companyName) => {
 };
 
 const sendWelcomeInvite = async (email, companyName) => {
-    const loginLink = `http://localhost:5173/?view=employee`; // Link to your login page
+    const frontendUrl = process.env.FRONTEND_URL || 'https://vcard.effedo.com';
+    const loginLink = `${frontendUrl}/?view=employee`;
     const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
             <h2 style="color: #6366f1; text-align: center;">Welcome to ${companyName}</h2>
